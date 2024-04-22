@@ -44,4 +44,4 @@ def handle_request (conn):
 while True:
     conn, peer_addr = server.accept()
     threading.Thread(target=handle_request, args=[conn]).start()
-    print(f'OK: {conn}')
+    #  print(f'OK: {conn}')
