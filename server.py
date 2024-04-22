@@ -2,20 +2,23 @@ import socket
 import re
 import json
 import locale
+import threading
 
 addr = ('localhost', 12345)
 server = socket.create_server(addr)
-
 server.listen()
-conn, peer_addr = server.accept()
 
-print(f'Conexão estabelecida:\n'
-      f'Cliente: {conn.getpeername()}\tServidor: {conn.getsockname()}')
+print(f'Server started: {server.getsockname()}')
 
-while True:
+# print(f'Conexão estabelecida:\n'
+#       f'Cliente: {conn.getpeername()}\tServidor: {conn.getsockname()}')
+
+def handle_request (conn):
+    # print(f'OK: {conn}')
     keyword = conn.recv(4096).decode()
+    # print(keyword)
     if keyword == '':
-        continue
+        return
     else:
         result_count = 0
         
@@ -23,8 +26,10 @@ while True:
             for i in range(10000):
                 line = file.readline()
                 news_item = json.loads(line)
-
-                if re.search(keyword, news_item['title']) or re.search(keyword, news_item['maintext']):
+                # print(f'Searching for {keyword} in {news_item}\n')
+                title = news_item['title'] if news_item['title'] != None else ''
+                maintext = news_item['maintext'] if news_item['maintext'] != None else ''
+                if re.search(keyword, title) or re.search(keyword, maintext):
                     result_count += 1
                     msg = json.dumps(news_item)
                     # print(news_item)
@@ -35,4 +40,8 @@ while True:
                     if result_count == 10:
                         break
             conn.send('1'.encode())
-        
+
+while True:
+    conn, peer_addr = server.accept()
+    threading.Thread(target=handle_request, args=[conn]).start()
+    print(f'OK: {conn}')
