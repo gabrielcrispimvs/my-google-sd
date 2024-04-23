@@ -65,7 +65,7 @@ while threading.active_count() > 1:
     pass
 
 print(len(result) - result.count(None))
-with open(f'log_{qnt_req_seg}_req_seg', mode='w') as file:
+with open(f'log_{qnt_req_seg}_req_seg.txt', mode='w') as file:
     file.write(f'ReqPorSegundo: {qnt_req_seg}; DurTeste: {total_time.total_seconds()}s\n')
     for time in result:
         if time != None:
