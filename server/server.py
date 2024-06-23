@@ -1,29 +1,25 @@
 import rpyc
+from time import sleep
+from threading import Thread
+from rpyc.utils.server import ThreadedServer
+
 import json
 import re
 from os import listdir
 from os.path import join
 
+
+r = rpyc.utils.registry.TCPRegistryClient('localhost', port=18811)
+
+keep_alive_interval = 5.0
 files_dir = 'files'
+node_name = 'n1'
 
+# print(listdir(files_dir))    
 
-class MyService(rpyc.Service):
-    def on_connect(self, conn):
-        pass
+class SaveFileService(rpyc.Service):
+    ALIASES = ['SAVEFILE_' + node_name]
 
-    def on_disconnect(self, conn):
-        pass
-
-    def exposed_get_answer(self): # this is an exposed method
-        return 42
-
-    exposed_the_real_answer_though = 43     # an exposed attribute
-
-    def get_question(self):  # while this method is not exposed
-        return "what is the airspeed velocity of an unladen swallow?"
-
-
-class InsertService(rpyc.Service):
     def on_connect(self, conn):
         print(f'Conectado: {conn}')
         pass
@@ -32,12 +28,17 @@ class InsertService(rpyc.Service):
         print(f'Conexão fechada: {conn}')
         pass
 
-    def exposed_insert(self, file):
-        print(f'Inserindo arquivo...')
+    def exposed_save_file(self, file):
+        print(f'Salvando arquivo.')
         print(f'Arquivo inserido.')
+
+    def update_monitor(self, added_file):
+        pass
 
 
 class SearchService(rpyc.Service):
+    ALIASES = ['SEARCH_' + node_name]
+
     def on_connect(self, conn):
         print(f'Conectado: {conn}')
         pass
@@ -78,7 +79,21 @@ class SearchService(rpyc.Service):
         print(result_list)
         return result_list
 
-from rpyc.utils.server import ThreadedServer
-r = rpyc.utils.registry.TCPRegistryClient('localhost', port=18811)
-t = ThreadedServer(SearchService, port=18812, registrar=r, auto_register=True)
+
+ip, port = r.discover('MONITOR')[0]
+conn = rpyc.connect(ip, port)
+conn.root.register_node(node_name, listdir(files_dir))
+conn.close()
+
+def ping_monitor(keep_alive_interval):
+    while True:
+        sleep(keep_alive_interval)
+        ip, port = r.discover('MONITOR')[0]
+        m = rpyc.connect(ip, port).root
+        m.keep_alive(node_name)
+
+t = Thread(target=ping_monitor, args=[keep_alive_interval])
 t.start()
+
+s = ThreadedServer(SaveFileService, registrar=r, auto_register=True)
+s.start()
