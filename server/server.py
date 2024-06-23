@@ -6,14 +6,21 @@ from rpyc.utils.server import ThreadedServer
 import json
 import re
 from os import listdir
+from os import mkdir
 from os.path import join
+import sys
 
 
 r = rpyc.utils.registry.TCPRegistryClient('localhost', port=18811)
 
 keep_alive_interval = 5.0
-files_dir = 'files'
-node_name = 'n1'
+node_name = sys.argv[1]
+files_dir = 'files/' + node_name
+
+try:
+    listdir(files_dir)
+except:
+    mkdir(files_dir)
 
 # print(listdir(files_dir))    
 
@@ -28,12 +35,26 @@ class SaveFileService(rpyc.Service):
         print(f'Conexão fechada: {conn}')
         pass
 
-    def exposed_save_file(self, file):
-        print(f'Salvando arquivo.')
+    def exposed_save_file(self, f):
+        
+        file_name = re.findall(r'/(.*)\Z', f.name)[0]
+        print(f'Salvando arquivo {file_name} ...')
+
+        with open(join(files_dir, file_name), 'w') as lf:
+            while True:
+                line = f.readline()
+                if line == '':
+                    break
+                lf.write(line)
+        
         print(f'Arquivo inserido.')
 
-    def update_monitor(self, added_file):
-        pass
+        self.update_monitor([file_name])
+
+    def update_monitor(self, added_files):
+        ip, port = r.discover('MONITOR')[0]
+        m = rpyc.connect(ip, port).root
+        m.register_node(node_name, added_files)
 
 
 class SearchService(rpyc.Service):

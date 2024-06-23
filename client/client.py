@@ -3,8 +3,6 @@ from rpyc.utils.registry import TCPRegistryClient
 
 r = rpyc.utils.registry.TCPRegistryClient('localhost', port=18811)
 
-print(r.discover('INSERT'))
-
 while True:
 
     cmd = input(
@@ -36,12 +34,13 @@ while True:
 
         case '2':
             pass
+
         case '3':
-            file_path = input(f'Digite o caminho do arquivo a ser inserido')
-            f = None
-            ip, port = r.discover('INSERT')[0]
-            m = rpyc.connect(ip, port).root
-            m.insert(f)
+            file_path = input(f'Digite o caminho do arquivo a ser inserido:\n')
+            with open(file_path, mode='r') as f:
+                ip, port = r.discover('INSERT')[0]
+                m = rpyc.connect(ip, port, config={'allow_public_attrs': True}).root
+                m.insert(f)
         case '4':
             pass
         case other:
