@@ -30,11 +30,9 @@ class SaveFileService(rpyc.Service):
     ALIASES = ['SAVEFILE_' + node_name]
 
     def on_connect(self, conn):
-        print(f'Conectado: {conn}')
         pass
 
     def on_disconnect(self, conn):
-        print(f'Conexão fechada: {conn}')
         pass
 
     def exposed_open_file(self, file_name):
