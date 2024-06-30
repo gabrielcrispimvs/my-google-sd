@@ -3,7 +3,10 @@ from threading import Thread
 from rpyc.utils.server import ThreadedServer
 from time import sleep
 
-r = rpyc.utils.registry.TCPRegistryClient('localhost', port=18811)
+registry_ip = 'localhost'
+registry_port = 18811
+
+r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
 
 countdown_time = 5.0 # Em segundos
 tolerancia = 3
@@ -27,13 +30,17 @@ class MonitorService (rpyc.Service):
 
     def update_lb_add (self, node_name, file_list):
         ip, port = r.discover('LOADBALANCER')[0]
-        lb = rpyc.connect(ip, port).root
+        conn = rpyc.connect(ip, port)
+        lb = conn.root
         lb.idx_add(node_name, file_list)
+        conn.close()
 
     def update_lb_remove (self, node_name, file_list=[]):
         ip, port = r.discover('LOADBALANCER')[0]
-        lb = rpyc.connect(ip, port).root
+        conn = rpyc.connect(ip, port)
+        lb = conn.root
         lb.idx_remove(node_name, file_list)
+        conn.close()
 
 
     node_timer = {}

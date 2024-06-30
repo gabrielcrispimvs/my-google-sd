@@ -2,7 +2,10 @@ import rpyc
 from threading import Thread
 from rpyc.utils.server import ThreadedServer
 
-r = rpyc.utils.registry.TCPRegistryClient('localhost', port=18811)
+registry_ip = 'localhost'
+registry_port = 18811
+
+r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
 
 class LoadBalancerService (rpyc.Service):
     

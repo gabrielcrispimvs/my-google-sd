@@ -10,8 +10,10 @@ from os import mkdir
 from os.path import join
 import sys
 
+registry_ip = 'localhost'
+registry_port = 18811
 
-r = rpyc.utils.registry.TCPRegistryClient('localhost', port=18811)
+r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
 
 keep_alive_interval = 5.0
 node_name = sys.argv[1]
@@ -35,37 +37,45 @@ class SaveFileService(rpyc.Service):
         print(f'Conexão fechada: {conn}')
         pass
 
-    def exposed_save_file(self, f):
-        
-        file_name = re.findall(r'/(.*)\Z', f.name)[0]
-        print(f'Salvando arquivo {file_name} ...')
+    def exposed_open_file(self, file_name):
+        return open(join(files_dir, file_name), mode='w')
 
-        with open(join(files_dir, file_name), 'w') as lf:
-            while True:
-                line = f.readline()
-                if line == '':
-                    break
-                lf.write(line)
-        
-        print(f'Arquivo inserido.')
+    def exposed_close_file(self, server_file):
+        server_file.close()
 
-        self.update_monitor([file_name])
+    # def exposed_save_file(self, f):
+        
+    #     file_name = re.findall(r'/(.+)\Z', f.name)[0]
+    #     print(f'Salvando arquivo {file_name} ...')
+
+    #     with open(join(files_dir, file_name), 'w') as lf:
+    #         while True:
+    #             line = f.readline()
+    #             if line == '':
+    #                 break
+    #             lf.write(line)
+        
+    #     print(f'Arquivo inserido.')
+
+    #     self.update_monitor([file_name])
 
     def update_monitor(self, added_files):
         ip, port = r.discover('MONITOR')[0]
-        m = rpyc.connect(ip, port).root
+        conn = rpyc.connect(ip, port)
+        m = conn.root
         m.register_node(node_name, added_files)
+        conn.close()
 
 
 class SearchService(rpyc.Service):
     ALIASES = ['SEARCH_' + node_name]
 
     def on_connect(self, conn):
-        print(f'Conectado: {conn}')
+        # print(f'Conectado: {conn}')
         pass
 
     def on_disconnect(self, conn):
-        print(f'Conexão fechada: {conn}')
+        # print(f'Conexão fechada: {conn}')
         pass
 
     def exposed_list_files(self):
@@ -107,14 +117,16 @@ conn.root.register_node(node_name, listdir(files_dir))
 conn.close()
 
 def ping_monitor(keep_alive_interval):
+    ip, port = r.discover('MONITOR')[0]
+    conn = rpyc.connect(ip, port)
+    m = conn.root
     while True:
         sleep(keep_alive_interval)
-        ip, port = r.discover('MONITOR')[0]
-        m = rpyc.connect(ip, port).root
         m.keep_alive(node_name)
+    conn.close()
 
 t = Thread(target=ping_monitor, args=[keep_alive_interval])
 t.start()
 
-s = ThreadedServer(SaveFileService, registrar=r, auto_register=True)
+s = ThreadedServer(SaveFileService, registrar=r, auto_register=True, protocol_config={'allow_public_attrs': True})
 s.start()
