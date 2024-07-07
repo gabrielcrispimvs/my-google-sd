@@ -38,22 +38,26 @@ class InsertService(rpyc.Service):
     
         file_name = findall(r'/(.+)\Z', f.name)[0]
 
-        serv_file_list = [conn.root.open_file(file_name) for conn in conn_list]
+        serv_list = [conn.root for conn in conn_list]
 
         print('Inserindo arquivos...')
 
         t_s = perf_counter()
 
+        chunk_num = 0
         while True:
             buffer = f.read(500000)
+
             if buffer == '':
-                break; 
-            for serv_file in serv_file_list:
-                serv_file.write(buffer)
+                break;
+
+            chunk_num += 1 
+            for serv in serv_list:
+                serv.save_chunk(file_name, chunk_num, buffer)
                 # Thread(target=serv_file.write, args=[buffer])
 
-        for serv_file in serv_file_list:
-            serv_file.close()
+        # for serv_file in serv_file_list:
+        #     serv_file.close()
 
         t_e = perf_counter()
 

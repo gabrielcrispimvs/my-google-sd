@@ -35,6 +35,17 @@ class SaveFileService(rpyc.Service):
     def on_disconnect(self, conn):
         pass
 
+    def exposed_save_chunk(self, file_name, chunk_num, data):
+        chunks_dir = join(files_dir, file_name)
+
+        try:
+            listdir(chunks_dir)
+        except:
+            mkdir(chunks_dir)
+
+        with open(join(chunks_dir, str(chunk_num)), mode='w') as chunk:
+            chunk.write(data)
+
     def exposed_open_file(self, file_name):
         return open(join(files_dir, file_name), mode='w')
 
