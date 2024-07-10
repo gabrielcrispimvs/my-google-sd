@@ -3,6 +3,10 @@ from time import sleep
 from threading import Thread
 from rpyc.utils.server import ThreadedServer
 
+from string import ascii_lowercase
+from string import digits
+from random import choices
+
 import json
 import re
 from os import listdir
@@ -16,15 +20,38 @@ registry_port = 18811
 r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
 
 keep_alive_interval = 5.0
-node_name = sys.argv[1]
-files_dir = 'files/' + node_name
+
+# Verifica
+try:
+    listdir('nodes')
+except:
+    mkdir('nodes')
+
+
+
+
+try:
+    # Nome do nó fornecido
+    node_name = sys.argv[1]        
+
+except IndexError:
+    # Nome do nó não fornecido
+
+    try: # Algum nome de nó já existente
+        names_list = listdir('nodes')
+        node_name = names_list[0]
+    except: # Nenhum nome de nó existente. Criando um novo
+        node_name = ''.join(choices(ascii_lowercase + digits, k=6))
+
+
+
+files_dir = 'nodes/' + node_name
 
 try:
     listdir(files_dir)
 except:
     mkdir(files_dir)
 
-# print(listdir(files_dir))    
 
 class SaveFileService(rpyc.Service):
     ALIASES = ['SAVEFILE_' + node_name]

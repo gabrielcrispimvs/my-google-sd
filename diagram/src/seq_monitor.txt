@@ -1,0 +1,9 @@
+title Monitoramento
+
+Slave->Monitor: register_node (node_name, file_list)
+activate Monitor
+Monitor->Load Balancer: update_lb (nodes, file_list)
+deactivate Monitor
+Slave->Monitor: keep_alive (node_name)
+Slave->Monitor: keep_alive (node_name)
+Slave->Monitor: keep_alive (node_name)

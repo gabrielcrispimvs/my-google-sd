@@ -1,0 +1,13 @@
+title Inserção
+Cliente->Serviço de Inserção:insert (file)
+activate Serviço de Inserção
+Serviço de Inserção->Load Balancer:get_nodes (qnt)
+activate Load Balancer
+Load Balancer->Serviço de Inserção:node_list
+deactivate Load Balancer
+Serviço de Inserção->Cliente: file.read (qnt_char)
+activate Cliente
+Cliente->Serviço de Inserção: buffer
+deactivate Cliente
+Serviço de Inserção->Slave: save_chunk (file_name, chunk, buffer)
+Serviço de Inserção->Load Balancer:idx_add(nodes, files)
