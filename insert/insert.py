@@ -17,22 +17,24 @@ r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
 class InsertService(rpyc.Service):
     
     def exposed_insert(self, f):
-        print(f'Inserindo arquivo')
         node_list = self.request_nodes(3)
         self.insert_file(f, node_list)
 
 
     def request_nodes (self, qnt):
+        print('Solicitando nós ao load balancer...')
         ip, port = r.discover('LOADBALANCER')[0]
         conn = rpyc.connect(ip, port)
         lb = conn.root
-        node_list = lb.get_nodes(qnt)
+        node_list = lb.get_nodes_insert(qnt)
+        conn.close()
+        print('Nós adquiridos.')
         return node_list
 
     def insert_file (self, f, node_list):
         conn_list = []
         for node_name in node_list:
-            ip, port = r.discover('SAVEFILE_' + node_name)[0]
+            ip, port = r.discover('DATANODE_' + node_name)[0]
             conn_list += [rpyc.connect(ip, port, config={'allow_public_attrs': True})]
 
     
@@ -44,20 +46,35 @@ class InsertService(rpyc.Service):
 
         t_s = perf_counter()
 
+        buffer = ''
         chunk_num = 0
         while True:
-            buffer = f.read(500000)
+            buffer += f.read(500000)
 
             if buffer == '':
                 break;
 
+            # print(f'readline: {buffer}')
+
+            news_sep_idx = len(buffer)
+            for idx, char in enumerate(buffer[::-1]):
+                # print(f'idx:{idx} char:{char}')
+                if char == '\n':
+                    news_sep_idx -= idx
+                    break;
+
+            # print(f'idx: {news_sep_idx}')
+
+            send_buffer = buffer[:news_sep_idx]
+            buffer = buffer[news_sep_idx:]
+
+            # print(f'Send: {send_buffer}')
+            # print(f'Buff: {buffer}\n')
+
             chunk_num += 1 
             for serv in serv_list:
-                serv.save_chunk(file_name, chunk_num, buffer)
+                serv.save_chunk(file_name, chunk_num, send_buffer)
                 # Thread(target=serv_file.write, args=[buffer])
-
-        # for serv_file in serv_file_list:
-        #     serv_file.close()
 
         t_e = perf_counter()
 

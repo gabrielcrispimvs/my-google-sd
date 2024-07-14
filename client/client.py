@@ -20,14 +20,12 @@ while True:
     match cmd:
         case '1': # Pesquisa
             keyword = input(f'Entre com o termo a ser buscado:\n')
-            servers = registry.discover('SEARCH')
+            
+            ip, port = r.discover('SEARCH')[0]
+            conn = rpyc.connect(ip, port, config={'sync_request_timeout': 240})
+            srch = conn.root
+            results = srch.search(keyword)
 
-            results = []
-
-            for ip, port in servers:
-                conn = rpyc.connect(ip, port)
-                results += conn.root.search(keyword)
-    
             for file_name, news_item in results:
                 print(
                     f'Notícia encontrada no arquivo {file_name}:\n'

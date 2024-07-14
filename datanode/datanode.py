@@ -14,6 +14,8 @@ from os import mkdir
 from os.path import join
 import sys
 
+from tqdm import tqdm
+
 registry_ip = 'localhost'
 registry_port = 18811
 
@@ -53,8 +55,8 @@ except:
     mkdir(files_dir)
 
 
-class SaveFileService(rpyc.Service):
-    ALIASES = ['SAVEFILE_' + node_name]
+class DataNodeService(rpyc.Service):
+    ALIASES = ['DATANODE_' + node_name]
 
     def on_connect(self, conn):
         pass
@@ -79,21 +81,6 @@ class SaveFileService(rpyc.Service):
     def exposed_close_file(self, server_file):
         server_file.close()
 
-    # def exposed_save_file(self, f):
-        
-    #     file_name = re.findall(r'/(.+)\Z', f.name)[0]
-    #     print(f'Salvando arquivo {file_name} ...')
-
-    #     with open(join(files_dir, file_name), 'w') as lf:
-    #         while True:
-    #             line = f.readline()
-    #             if line == '':
-    #                 break
-    #             lf.write(line)
-        
-    #     print(f'Arquivo inserido.')
-
-    #     self.update_monitor([file_name])
 
     def update_monitor(self, added_files):
         ip, port = r.discover('MONITOR')[0]
@@ -103,48 +90,49 @@ class SaveFileService(rpyc.Service):
         conn.close()
 
 
-class SearchService(rpyc.Service):
-    ALIASES = ['SEARCH_' + node_name]
-
-    def on_connect(self, conn):
-        # print(f'Conectado: {conn}')
-        pass
-
-    def on_disconnect(self, conn):
-        # print(f'Conexão fechada: {conn}')
-        pass
-
-    def exposed_list_files(self):
-        return listdir(files_dir)
-
-    def exposed_search(self, keyword):
+    ### BUSCA
+    def exposed_search(self, keyword, file_name, part, qnt_parts, result_list):
         print(f'Buscando: {keyword}')
         re_pattern = re.compile(r'\s' + keyword + r'\s', flags=re.IGNORECASE)
 
-        result_list = []
-        file_list = listdir(files_dir)
+        # result_list = []
+        chunks_dir = join(files_dir, file_name)
+        chunk_list = listdir(chunks_dir)
 
-        for file_name in file_list:
-            print(f'Buscando no arquivo {file_name}...')
-            with open(join(files_dir, file_name), encoding='utf-8') as f:
+        part_size = len(chunk_list) // qnt_parts
+
+        chunk_list = [chunk for idx, chunk in enumerate(chunk_list) if idx % qnt_parts == part-1]
+
+        for chunk in tqdm(chunk_list):
+            # print(f'Buscando no chunk {chunk} do arquivo {file_name}...')
+            with open(join(chunks_dir, chunk), encoding='utf-8') as f:
                 while True:
                     line = f.readline()
+                    # print(line)
                     if line == '':
                         break
-                    news_item = json.loads(line)
-                    print(news_item)
 
-                    if news_item['title'] == None:
-                        news_item['title'] = ''
-                    if news_item['maintext'] == None:
-                        news_item['maintext'] = ''
+                    try:
+                        news_item = json.loads(line)
+                        # print(news_item)
 
-                    if (re_pattern.search(news_item['title'])) or (re_pattern.search(news_item['maintext'])):
-                        result_list.append((file_name, news_item))
+                        if news_item['title'] == None:
+                            news_item['title'] = ''
+                        if news_item['maintext'] == None:
+                            news_item['maintext'] = ''
+
+                        if (re_pattern.search(news_item['title'])) or (re_pattern.search(news_item['maintext'])):
+                            result_list += [(file_name, news_item)]
+                    except:
+                        ### Tentando ler arquivo que não é de notícias (como o arquivo teste.txt)
+                        break
 
         print(f'Busca finalizada.')
-        print(result_list)
-        return result_list
+        # for file_name, news_item in result_list:
+        #     print(news_item)
+        # return result_list
+
+
 
 
 ip, port = r.discover('MONITOR')[0]
@@ -164,5 +152,5 @@ def ping_monitor(keep_alive_interval):
 t = Thread(target=ping_monitor, args=[keep_alive_interval])
 t.start()
 
-s = ThreadedServer(SaveFileService, registrar=r, auto_register=True, protocol_config={'allow_public_attrs': True})
+s = ThreadedServer(DataNodeService, registrar=r, auto_register=True, protocol_config={'allow_public_attrs': True})
 s.start()

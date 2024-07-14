@@ -14,7 +14,7 @@ class LoadBalancerService (rpyc.Service):
     node_list = []
 
 
-    def exposed_get_nodes (self, qnt):
+    def exposed_get_nodes_insert (self, qnt):
         if qnt >= len(self.node_list):
             return self.node_list
 
@@ -26,6 +26,18 @@ class LoadBalancerService (rpyc.Service):
             self.next_node += 1
         return to_return
         
+    def exposed_get_nodes_search (self):
+        search_dict = {}
+        for node in self.node_list:
+            search_dict[node] = []
+        
+        for f in self.index:
+            qnt_nodes = len(self.index[f])
+            for idx, node in enumerate(self.index[f]):
+                search_dict[node] += [ (f, idx+1, qnt_nodes) ]
+
+        return search_dict
+            
 
     # 
     def exposed_idx_add (self, node_name, file_list):
