@@ -2,7 +2,7 @@ import rpyc
 from rpyc.utils.server import ThreadedServer
 from threading import Thread
 
-registry_ip = 'localhost'
+registry_ip = '192.168.40.240'
 registry_port = 18811
 
 r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
