@@ -1,9 +1,17 @@
 import rpyc
 from threading import Thread
 from rpyc.utils.server import ThreadedServer
+import sys
 
-registry_ip = '192.168.40.240'
-registry_port = 18811
+try:
+    registry_ip = sys.argv[1]
+    registry_port = sys.argv[2]
+except:
+    print('Passe IP e porta do registry como argumentos.')
+    exit()
+
+# registry_ip = '192.168.40.240'
+# registry_port = 18811
 
 r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
 
