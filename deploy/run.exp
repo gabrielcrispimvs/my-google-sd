@@ -1,0 +1,54 @@
+#!/bin/expect
+
+exp_internal 1
+
+# Check if the correct number of arguments is provided
+if {$argc != 1} {
+    puts "Usage: $argv0 <hostname>"
+    exit 1
+}
+# Set the variables
+set username "aluno"
+#set hostname "192.168.40.177"
+#set hostname "192.168.40.68"
+set hostname [lindex $argv 0]
+set password "aula321"
+
+set script_path "install.sh"
+set script_file [open "$script_path" r]
+set script_content [read $script_file]
+close $script_file
+
+# Spawn the SSH process
+spawn ssh $username@$hostname
+
+expect {
+    "you sure" {
+        send "yes\r"
+        expect "sword:"
+        send "$password\r"
+    }
+    "sword:" {
+        send "$password\r"
+    }
+}
+
+
+## Expect the password prompt
+#expect "sword:"
+#
+## Send the password
+#send "$password\r"
+
+expect "?*$?*"
+
+send "$script_content"
+expect "?*$?*"
+send "ifconfig\r"
+expect "?*$?*"
+send "exit\r"
+
+# Wait for the command to complete
+expect eof
+
+interact
