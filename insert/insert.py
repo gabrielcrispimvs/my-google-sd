@@ -9,7 +9,7 @@ from time import perf_counter
 
 try:
     registry_ip = sys.argv[1]
-    registry_port = sys.argv[2]
+    registry_port = int(sys.argv[2])
 except:
     print('Passe IP e porta do registry como argumentos.')
     exit()
@@ -33,7 +33,7 @@ class InsertService(rpyc.Service):
         conn = rpyc.connect(ip, port)
         lb = conn.root
         node_list = lb.get_nodes_insert(qnt)
-        conn.close()
+        # conn.close()
         print('Nós adquiridos.')
         return node_list
 
