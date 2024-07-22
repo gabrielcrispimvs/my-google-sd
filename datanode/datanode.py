@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 try:
     registry_ip = sys.argv[1]
-    registry_port = sys.argv[2]
+    registry_port = int(sys.argv[2])
 except:
     print('Passe IP e porta do registry como argumentos.')
     exit()
