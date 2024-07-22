@@ -10,5 +10,6 @@
 #./run.exp 192.168.40.248 &
 
 #TODAY:
+#Adicionar os ips das máquinas nas quais será feito o deploy dos data nodes
 ./run.exp 192.168.40.205 &
 ./run.exp 192.168.40.46 &
