@@ -20,10 +20,10 @@ fi
 pip install rpyc
 
 echo Killing previous process
-pkill -f datanode.py
+pkill -SIGINT -f datanode.py
 
 echo Starting datanode.py
 ### ALTERAR localhost para o ip da máquina que está rodando o registry
-python3 datanode.py localhost 18811 &
+python3 datanode.py localhost 18811 > log.txt &
 
 disown

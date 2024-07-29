@@ -13,7 +13,7 @@ from os import listdir
 from os import mkdir
 from os.path import join
 import sys
-from tqdm import tqdm
+# from tqdm import tqdm
 
 try:
     registry_ip = sys.argv[1]
@@ -109,7 +109,7 @@ class DataNodeService(rpyc.Service):
 
         chunk_list = [chunk for idx, chunk in enumerate(chunk_list) if idx % qnt_parts == part-1]
 
-        for chunk in tqdm(chunk_list):
+        for chunk in chunk_list:
             # print(f'Buscando no chunk {chunk} do arquivo {file_name}...')
             with open(join(chunks_dir, chunk), encoding='utf-8') as f:
                 while True:
