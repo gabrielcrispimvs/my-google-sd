@@ -29,7 +29,7 @@ r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
 
 keep_alive_interval = 5.0
 
-# Verifica
+# Cria a pasta nodes caso não exista
 try:
     listdir('nodes')
 except:
@@ -139,24 +139,43 @@ class DataNodeService(rpyc.Service):
         # return result_list
 
 
+import pika
+
+conn = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+channel = conn.channel()
+
+channel.exchange_declare(exchange='monitoring', exchange_type='direct')
 
 
-ip, port = r.discover('MONITOR')[0]
-conn = rpyc.connect(ip, port)
-conn.root.register_node(node_name, listdir(files_dir))
-conn.close()
+file_list = listdir(files_dir)
+import pickle
+
+channel.basic_publish(
+    exchange='monitoring',
+    routing_key='register',
+    body=pickle.dumps((node_name, file_list))
+)
 
 def ping_monitor(keep_alive_interval):
-    ip, port = r.discover('MONITOR')[0]
-    conn = rpyc.connect(ip, port)
-    m = conn.root
-    while True:
-        sleep(keep_alive_interval)
-        m.keep_alive(node_name)
-    conn.close()
+    try:
+        while True:
+            sleep(keep_alive_interval)
+            channel.basic_publish(
+                exchange='monitoring',
+                routing_key='keep_alive',
+                body=node_name
+            )
+    
+    except KeyboardInterrupt:
+        conn.close()
+
+
 
 t = Thread(target=ping_monitor, args=[keep_alive_interval])
 t.start()
+
+
+
 
 s = ThreadedServer(DataNodeService, registrar=r, auto_register=True, protocol_config={'allow_public_attrs': True})
 s.start()
