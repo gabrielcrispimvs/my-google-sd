@@ -1,110 +1,95 @@
-import rpyc
-from re import findall
-from threading import Thread
-from rpyc.utils.server import ThreadedServer
-from tqdm import tqdm
+import pika
+import pickle
+from re import sub
 import sys
 
 from time import perf_counter
 
 try:
-    registry_ip = sys.argv[1]
-    registry_port = int(sys.argv[2])
+    broker_ip = sys.argv[1]
 except:
-    print('Passe IP e porta do registry como argumentos.')
-    exit()
+    broker_ip = 'localhost'
+    print(f'Usando endereço padrão: {broker_ip}')
 
-# registry_ip = '192.168.40.240'
-# registry_port = 18811
-
-r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
-
-
-class InsertService(rpyc.Service):
-    
-    def exposed_insert(self, f):
-        node_list = self.request_nodes(3)
-        self.insert_file(f, node_list)
+try:
+    broker_port = int(sys.argv[2])
+except:
+    broker_port = 5672
+    print(f'Usando porta padrão: {broker_port}')
 
 
-    def request_nodes (self, qnt):
-        print('Solicitando nós ao load balancer...')
-        ip, port = r.discover('LOADBALANCER')[0]
-        conn = rpyc.connect(ip, port)
-        lb = conn.root
-        node_list = lb.get_nodes_insert(qnt)
-        # conn.close()
-        print('Nós adquiridos.')
-        return node_list
-
-    def insert_file (self, f, node_list):
-        conn_list = []
-        for node_name in node_list:
-            ip, port = r.discover('DATANODE_' + node_name)[0]
-            conn_list += [rpyc.connect(ip, port, config={'allow_public_attrs': True})]
-
-    
-        file_name = findall(r'/(.+)\Z', f.name)[0]
-
-        serv_list = [conn.root for conn in conn_list]
-
-        print('Inserindo arquivos...')
-
-        t_s = perf_counter()
-
-        buffer = ''
-        chunk_num = 0
-        while True:
-            buffer += f.read(500000)
-
-            if buffer == '':
-                break;
-
-            # print(f'readline: {buffer}')
-
-            news_sep_idx = len(buffer)
-            for idx, char in enumerate(buffer[::-1]):
-                # print(f'idx:{idx} char:{char}')
-                if char == '\n':
-                    news_sep_idx -= idx
-                    break;
-
-            # print(f'idx: {news_sep_idx}')
-
-            send_buffer = buffer[:news_sep_idx]
-            buffer = buffer[news_sep_idx:]
-
-            # print(f'Send: {send_buffer}')
-            # print(f'Buff: {buffer}\n')
-
-            chunk_num += 1 
-            for serv in serv_list:
-                serv.save_chunk(file_name, chunk_num, send_buffer)
-                # Thread(target=serv_file.write, args=[buffer])
-
-        t_e = perf_counter()
-
-        for conn in conn_list:
-            conn.close()
-
-        del buffer
-
-        
-        print('Inserção finalizada.')
-        print(t_e - t_s)
-
-        for node_name in node_list:
-            self.update_lb(file_name, node_name)
-
-    def update_lb (self, file_name, node):
-        ip, port = r.discover('LOADBALANCER')[0]
-        conn = rpyc.connect(ip, port)
-        lb = conn.root
-        lb.idx_add(node, [file_name])
-        conn.close()
+fator_replica = 3
 
 
+conn = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+channel = conn.channel()
 
 
-s = ThreadedServer(InsertService(), registrar=r, auto_register=True)
-s.start()
+channel.exchange_declare('lb_request', exchange_type='direct')
+channel.exchange_declare('send_chunk', exchange_type='topic')
+
+####################################
+
+channel.exchange_declare('client_cmd', exchange_type='direct')
+
+channel.queue_declare('insert', exclusive=True)
+channel.queue_bind(
+    queue='insert',
+    exchange='client_cmd',
+    routing_key='insert'
+)
+
+# Funções
+
+def request_nodes (file_name, chunk_num, qnt):
+    result = channel.queue_declare('', exclusive=True)
+    callback_queue = result.method.queue
+
+    response = False
+
+    def on_response (ch, method, properties, body):
+        nonlocal response
+        response = True
+        ch.basic_ack(method.delivery_tag)
+
+    msg = pickle.dumps((file_name, chunk_num, qnt))
+
+    channel.basic_publish(
+        exchange='lb_request',
+        routing_key='insert',
+        body=msg,
+        properties=pika.BasicProperties(reply_to=callback_queue)
+    )
+
+    while not response:
+        queue_state = channel.queue_declare(callback_queue, passive=True)
+        if queue_state.method.message_count != 0:
+            method, props, body = channel.basic_get(callback_queue)
+            on_response(channel, method, props, body)
+
+def insert_file (ch, method, props, body):
+    file_name, chunk_num, buffer = pickle.loads(body)
+    file_name_topic = sub(r'\.', '/', file_name)
+
+    # print(f'Inserindo chunk {chunk_num} do arquivo {file_name}')
+
+    request_nodes(file_name, chunk_num, fator_replica)
+
+    channel.basic_publish(
+        exchange='send_chunk',
+        routing_key=file_name_topic+'.'+str(chunk_num),
+        body=body
+    )
+
+    ch.basic_ack(method.delivery_tag)
+
+
+########################
+
+
+channel.basic_consume(
+    queue='insert',
+    on_message_callback=insert_file
+)
+
+channel.start_consuming()

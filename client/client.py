@@ -15,14 +15,22 @@ except:
 r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
 
 
+import pika
+import pickle
+
+from re import findall
+
+conn = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+channel = conn.channel()
+
+channel.exchange_declare('client_cmd', exchange_type='direct')
+
 while True:
 
     cmd = input(
         f'Selecione uma opção:\n'
         f'1. Pesquisar\n'
-        f'2. Listar arquivos\n'
-        f'3. Inserir arquivo\n'
-        f'4. Remover arquivo\n'
+        f'2. Inserir arquivo\n'
     )
 
     match cmd:
@@ -36,17 +44,54 @@ while True:
 
             for file_name, news_item in results:
                 print(
-                    f'Notícia encontrada no arquivo {file_name}:\n'
-                    f'{news_item['title']}\n'
-                    f'{news_item['maintext']}\n'
-                    f'Link: {news_item['url']}\n'
+                    f"Notícia encontrada no arquivo {file_name}:\n"
+                    f"{news_item['title']}\n"
+                    f"{news_item['maintext']}\n"
+                    f"Link: {news_item['url']}\n"
                 )
 
         case '2':
-            pass
+            try:
+                file_path = input(f'Digite o caminho do arquivo a ser inserido.\n')
+                    
+                with open(file_path, mode='r') as f:
+                    file_name = findall(r'(\w+\.\w+)\Z', file_path)[0]
+                    print(f'Inserindo arquivo com nome {file_name}')
+
+                    buffer = ''
+                    chunk_num = 0
+                    while True:
+                        buffer += f.read(500000)
+
+                        if buffer == '':
+                            break;
+
+                        news_sep_idx = len(buffer)
+                        for idx, char in enumerate(buffer[::-1]):
+                            if char == '\n':
+                                news_sep_idx -= idx
+                                break;
+
+                        send_buffer = buffer[:news_sep_idx]
+                        buffer = buffer[news_sep_idx:]
+
+                        chunk_num += 1
+
+                        msg = pickle.dumps((file_name, chunk_num, send_buffer))
+
+                        channel.basic_publish(
+                            exchange='client_cmd',
+                            routing_key='insert',
+                            body=msg
+                        )
+
+            except FileNotFoundError:
+                print(f'Arquivo não encontrado.')
 
         case '3':
-            file_path = input(f'Digite o caminho do arquivo a ser inserido:\n')
+            file_path = input(
+                f'Digite o caminho do arquivo a ser inserido.\n'
+            )
             with open(file_path, mode='r') as f:
                 ip, port = r.discover('INSERT')[0]
                 conn = rpyc.connect(ip, port, config={'allow_public_attrs': True, 'sync_request_timeout': 240})
@@ -59,3 +104,9 @@ while True:
             print(f'{other} não é uma opção válida.\n')
 
 # c.root
+
+
+
+
+
+
