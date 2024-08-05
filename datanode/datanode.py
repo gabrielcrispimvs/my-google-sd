@@ -142,7 +142,7 @@ class DataNodeService(rpyc.Service):
 import pika
 import pickle
 from re import sub
-
+# teste
 conn = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
 channel = conn.channel()
 
