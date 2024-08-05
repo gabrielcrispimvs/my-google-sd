@@ -21,11 +21,13 @@ try:
 except:
     print('Passe IP e porta do registry como argumentos.')
     exit()
+print('portas')
 
 # registry_ip = '192.168.40.240'
 # registry_port = 18811
 
 r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
+print('rpyc')
 
 keep_alive_interval = 5.0
 
@@ -37,6 +39,7 @@ except:
 
 
 
+print('dirs')
 
 try:
     # Nome do nó fornecido
@@ -60,9 +63,11 @@ try:
 except:
     mkdir(files_dir)
 
+print('dirs2')
 
 class DataNodeService(rpyc.Service):
     ALIASES = ['DATANODE_' + node_name]
+    print('service')
 
     def on_connect(self, conn):
         pass
@@ -89,6 +94,7 @@ class DataNodeService(rpyc.Service):
 
 
     def update_monitor(self, added_files):
+        print('update')
         ip, port = r.discover('MONITOR')[0]
         conn = rpyc.connect(ip, port)
         m = conn.root
@@ -147,6 +153,7 @@ conn.root.register_node(node_name, listdir(files_dir))
 conn.close()
 
 def ping_monitor(keep_alive_interval):
+    print('ping')
     ip, port = r.discover('MONITOR')[0]
     conn = rpyc.connect(ip, port)
     m = conn.root
@@ -157,6 +164,8 @@ def ping_monitor(keep_alive_interval):
 
 t = Thread(target=ping_monitor, args=[keep_alive_interval])
 t.start()
+print('fim2')
 
 s = ThreadedServer(DataNodeService, registrar=r, auto_register=True, protocol_config={'allow_public_attrs': True})
 s.start()
+print('fim')
