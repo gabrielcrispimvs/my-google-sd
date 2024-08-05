@@ -145,12 +145,13 @@ class DataNodeService(rpyc.Service):
         # return result_list
 
 
-
+print('antes')
 
 ip, port = r.discover('MONITOR')[0]
 conn = rpyc.connect(ip, port)
 conn.root.register_node(node_name, listdir(files_dir))
 conn.close()
+print('depois')
 
 def ping_monitor(keep_alive_interval):
     print('ping')
