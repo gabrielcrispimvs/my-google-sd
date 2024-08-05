@@ -148,8 +148,11 @@ class DataNodeService(rpyc.Service):
 print('antes')
 
 ip, port = r.discover('MONITOR')[0]
+print('ipport')
 conn = rpyc.connect(ip, port)
+print('connect')
 conn.root.register_node(node_name, listdir(files_dir))
+print('register')
 conn.close()
 print('depois')
 
