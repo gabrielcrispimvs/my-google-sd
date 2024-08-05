@@ -142,8 +142,8 @@ class DataNodeService(rpyc.Service):
 import pika
 import pickle
 from re import sub
-# teste
-conn = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+
+conn = pika.BlockingConnection(pika.ConnectionParameters('192.68.40.141'))
 channel = conn.channel()
 
 channel.exchange_declare(exchange='monitoring', exchange_type='direct')
@@ -200,7 +200,7 @@ def connect_to_chunk (ch, method, props, body):
 
 
 def ping_monitor(keep_alive_interval):
-    ping_connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    ping_connection = pika.BlockingConnection(pika.ConnectionParameters('192.68.40.141'))
     ping_channel = ping_connection.channel()
 
     ping_channel.exchange_declare('monitoring', exchange_type='direct')
