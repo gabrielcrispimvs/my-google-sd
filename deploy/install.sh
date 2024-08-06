@@ -27,6 +27,6 @@ pkill -SIGINT -f datanode.py
 echo Starting datanode.py
 ### ALTERAR localhost para o ip da máquina que está rodando o registry
 cd datanode
-python3 datanode.py localhost 18811 > log.txt &
+python3 datanode.py localhost 5672 > log.txt &
 
 disown

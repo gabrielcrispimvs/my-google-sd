@@ -62,6 +62,7 @@ def get_files ():
         print(corr_id, props.correlation_id)
         if props.correlation_id == corr_id:
             response = pickle.loads(body)
+            print(response)
             ch.basic_ack(method.delivery_tag)
 
     channel.basic_publish(

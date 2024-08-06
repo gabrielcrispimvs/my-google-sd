@@ -7,98 +7,56 @@ from string import ascii_lowercase
 from string import digits
 from random import choices
 
+import pika
+import pickle
+
+# Solicitando nós 
+next_node = 0
+node_list = []
+
+index = {}
+
+file_dict = {}
+
 def generate_corr_id (qnt=12):
     return ''.join(choices(ascii_lowercase + digits, k=qnt))
 
 try:
-    registry_ip = sys.argv[1]
-    registry_port = int(sys.argv[2])
+    broker_ip = sys.argv[1]
 except:
-    print('Passe IP e porta do registry como argumentos.')
-    exit()
+    broker_ip = 'localhost'
+    print(f'Usando endereço padrão: {broker_ip}')
 
-# registry_ip = '192.168.40.240'
-# registry_port = 18811
-
-r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
-
-class LoadBalancerService (rpyc.Service):
-    
-    # Solicitando nós 
-    next_node = 0
-    node_list = []
-
-
-    def exposed_get_nodes_insert (self, qnt):
-        if qnt >= len(self.node_list):
-            return self.node_list
-
-        to_return = []
-        for i in range(qnt):
-            if self.next_node >= len(self.node_list):
-                self.next_node = 0
-            to_return += [self.node_list[self.next_node]]
-            self.next_node += 1
-        return to_return
-        
-    def exposed_get_nodes_search (self):
-        search_dict = {}
-        for node in self.node_list:
-            search_dict[node] = []
-        
-        for f in self.index:
-            qnt_nodes = len(self.index[f])
-            for idx, node in enumerate(self.index[f]):
-                search_dict[node] += [ (f, idx+1, qnt_nodes) ]
-
-        return search_dict
-            
-
-    index = {}
-
-
-
-
-
-
-
-
-
-
-
-lb = LoadBalancerService()
-
-import pika
-import pickle
-
-file_dict = {}
+try:
+    broker_port = int(sys.argv[2])
+except:
+    broker_port = 5672
+    print(f'Usando porta padrão: {broker_port}')
 
 def remove_node (ch, method, props, body):
     node_name = body.decode()
 
-    if node_name in lb.node_list:
-        lb.node_list.remove(node_name)
+    if node_name in node_list:
+        node_list.remove(node_name)
 
-    for file_name in lb.index:
-        if node_name in lb.index[file_name]:
-            lb.index[file_name].remove(node_name)
+    for file_name in index:
+        if node_name in index[file_name]:
+            index[file_name].remove(node_name)
 
     ch.basic_ack(method.delivery_tag)
 
     print(
         f'Índice e lista de nós atualizados:\n'
-        f'{lb.node_list}\n'
-        f'{lb.index}\n'
+        f'{node_list}\n'
+        f'{index}\n'
     )
 
 
-conn = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+# Iniciando conexão com RabbitMQ
+conn = pika.BlockingConnection(pika.ConnectionParameters(host=broker_ip, port=broker_port))
 channel = conn.channel()
 
 channel.exchange_declare(exchange='chunk_conn', exchange_type='direct')
-
-############################
-
 channel.exchange_declare(exchange='lb_update', exchange_type='direct')
 channel.exchange_declare(exchange='lb_request', exchange_type='direct')
 
@@ -118,7 +76,6 @@ channel.queue_bind(
 )
 
 channel.queue_declare('insert_req', exclusive=True)
-# print(insert_req_queue)
 channel.queue_bind(
     queue='insert_req',
     exchange='lb_request',
@@ -151,28 +108,26 @@ channel.queue_bind(
 
 
 def add_file (ch, method, props, body):
+    global node_list
     node_name, file_list = pickle.loads(body)
-    if node_name not in lb.node_list:
-        lb.node_list += [node_name]
+    if node_name not in node_list:
+        node_list += [node_name]
 
     for file_name in file_list:
-        if not file_name in lb.index:
-            lb.index[file_name] = [node_name]
-        elif not node_name in lb.index[file_name]:
-            lb.index[file_name] += [node_name]
+        if not file_name in index:
+            index[file_name] = [node_name]
+        elif not node_name in index[file_name]:
+            index[file_name] += [node_name]
     print(
         f'Índice e lista de nós atualizados:\n'
-        f'{lb.node_list}\n'
-        f'{lb.index}\n'
+        f'{node_list}\n'
+        f'{index}\n'
     )
     
 
 def connect_datanodes_to_chunk (chosen_nodes, file_name, chunk_num):
     result = channel.queue_declare(queue='', exclusive=True)
     callback_queue = result.method.queue
-
-    # print(f'Callback: {callback_queue}')
-    # print('Conectando os nós aos tópicos do chunk.')
 
     response = {n : False for n in chosen_nodes}
 
@@ -211,23 +166,21 @@ def choose_nodes (ch, method, props, body):
     global round_robin_next
 
     file_name, chunk_num, qnt = pickle.loads(body)
-
+    
     # print(f'Selecionando nós para inserção do chunk {chunk_num} do arquivo {file_name}')
 
     chosen_nodes = []
 
-    if (file_name in lb.index) and (chunk_num in lb.index[file_name]):
-        qnt -= len(lb.index[file_name][chunk_num])
+    if (file_name in index) and (chunk_num in index[file_name]):
+        qnt -= len(index[file_name][chunk_num])
 
-
-
-    if qnt >= len(lb.node_list):
-        chosen_nodes = lb.node_list
+    if qnt >= len(node_list):
+        chosen_nodes = node_list
     else:
         while len(chosen_nodes) < qnt:
-            if round_robin_next >= len(lb.node_list):
+            if round_robin_next >= len(node_list):
                 round_robin_next = 0
-            chosen_nodes += [lb.node_list[round_robin_next]]
+            chosen_nodes += [node_list[round_robin_next]]
             round_robin_next += 1
 
     connect_datanodes_to_chunk(chosen_nodes, file_name, chunk_num)
@@ -249,8 +202,6 @@ def update_files (ch, method, props, body):
 def get_files (ch, method, props, body):
     
     response = file_dict
-
-
     channel.basic_publish(
         exchange='',
         routing_key=props.reply_to,
@@ -290,12 +241,4 @@ channel.basic_consume(
 
 ###########
 
-t = Thread(target=channel.start_consuming)
-t.start()
-# Levantando Load Balancer
-s = ThreadedServer(lb, registrar=r, auto_register=True)
-# s.start()
-
-
-# t = Thread(target=s.start)
-# t.start()
+channel.start_consuming()

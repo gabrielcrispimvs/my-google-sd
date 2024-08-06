@@ -6,20 +6,9 @@ from string import ascii_lowercase
 from string import digits
 from random import choices
 
-def generate_corr_id (qnt=12):
-    return ''.join(choices(ascii_lowercase + digits, k=qnt))
 
-try:
-    registry_ip = sys.argv[1]
-    registry_port = int(sys.argv[2])
-except:
-    print('Passe IP e porta do registry como argumentos.')
-    exit()
-
-# registry_ip = '192.168.40.240'
-# registry_port = 18811
-
-r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
+def generate_corr_id(qnt=12):
+    return "".join(choices(ascii_lowercase + digits, k=qnt))
 
 
 import pika
@@ -27,22 +16,37 @@ import pickle
 
 from re import findall
 
-conn = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+
+def generate_corr_id(qnt=12):
+    return "".join(choices(ascii_lowercase + digits, k=qnt))
+
+
+try:
+    broker_ip = sys.argv[1]
+except:
+    broker_ip = "localhost"
+    print(f"Usando endereço padrão: {broker_ip}")
+
+try:
+    broker_port = int(sys.argv[2])
+except:
+    broker_port = 5672
+    print(f"Usando porta padrão: {broker_port}")
+
+
+# Iniciando conexão com RabbitMQ
+conn = pika.BlockingConnection(
+    pika.ConnectionParameters(host=broker_ip, port=broker_port)
+)
 channel = conn.channel()
 
-channel.exchange_declare('client_cmd', exchange_type='direct')
+channel.exchange_declare("client_cmd")
 
-result = channel.queue_declare('', exclusive=True)
+result = channel.queue_declare("", exclusive=True)
 callback_queue = result.method.queue
-print(callback_queue)
-
 while True:
 
-    cmd = input(
-        f'Selecione uma opção:\n'
-        f'1. Pesquisar\n'
-        f'2. Inserir arquivo\n'
-    )
+    cmd = input(f"Selecione uma opção:\n" f"1. Pesquisar\n" f"2. Inserir arquivo\n")
 
     match cmd:
         case '1': # Pesquisa
@@ -84,33 +88,32 @@ while True:
                         f"Link: {news_item['url']}\n"
                     )
 
-        case '2':
+        case "2":
             try:
-                file_path = input(f'Digite o caminho do arquivo a ser inserido.\n')
-                    
-                with open(file_path, mode='r') as f:
-                    file_name = findall(r'(\w+\.\w+)\Z', file_path)[0]
-                    print(f'Inserindo arquivo com nome {file_name}')
+                file_path = input(f"Digite o caminho do arquivo a ser inserido.\n")
 
-                    buffer = ''
+                with open(file_path, mode="r") as f:
+                    file_name = findall(r"(\w+\.\w+)\Z", file_path)[0]
+                    print(f"Inserindo arquivo com nome {file_name}")
+
+                    buffer = ""
                     chunk_num = 0
                     while True:
                         buffer += f.read(5000000)
 
-                        if buffer == '':
+                        if buffer == "":
                             channel.basic_publish(
-                                exchange='client_cmd',
-                                routing_key='insert',
-                                body=pickle.dumps((file_name,chunk_num,''))
+                                exchange="client_cmd",
+                                routing_key="insert",
+                                body=pickle.dumps((file_name, chunk_num, "")),
                             )
-
-                            break;
+                            break
 
                         news_sep_idx = len(buffer)
                         for idx, char in enumerate(buffer[::-1]):
-                            if char == '\n':
+                            if char == "\n":
                                 news_sep_idx -= idx
-                                break;
+                                break
 
                         send_buffer = buffer[:news_sep_idx]
                         buffer = buffer[news_sep_idx:]
@@ -120,33 +123,27 @@ while True:
                         msg = pickle.dumps((file_name, chunk_num, send_buffer))
 
                         channel.basic_publish(
-                            exchange='client_cmd',
-                            routing_key='insert',
-                            body=msg
+                            exchange="client_cmd", routing_key="insert", body=msg
                         )
 
             except FileNotFoundError:
-                print(f'Arquivo não encontrado.')
+                print(f"Arquivo não encontrado.")
 
-        case '3':
-            file_path = input(
-                f'Digite o caminho do arquivo a ser inserido.\n'
-            )
-            with open(file_path, mode='r') as f:
-                ip, port = r.discover('INSERT')[0]
-                conn = rpyc.connect(ip, port, config={'allow_public_attrs': True, 'sync_request_timeout': 240})
+        case "3":
+            file_path = input(f"Digite o caminho do arquivo a ser inserido.\n")
+            with open(file_path, mode="r") as f:
+                ip, port = r.discover("INSERT")[0]
+                conn = rpyc.connect(
+                    ip,
+                    port,
+                    config={"allow_public_attrs": True, "sync_request_timeout": 240},
+                )
                 m = conn.root
                 m.insert(f)
                 conn.close()
-        case '4':
+        case "4":
             pass
         case other:
-            print(f'{other} não é uma opção válida.\n')
+            print(f"{other} não é uma opção válida.\n")
 
 # c.root
-
-
-
-
-
-

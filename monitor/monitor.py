@@ -30,15 +30,7 @@ tolerancia = 3
 node_timer = {}
 
 
-def monitor():
-    conn_monitor = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    m_channel = conn_monitor.channel()
-
-    m_channel.exchange_declare(
-        exchange='lb_update',
-        exchange_type='direct',
-    )
-
+def monitor(channel):
     try:
         while True:
             sleep(countdown_time)
@@ -49,7 +41,7 @@ def monitor():
 
             for node_name in node_timer:
                 if node_timer[node_name] == 0:
-                    m_channel.basic_publish(
+                    channel.basic_publish(
                         exchange='lb_update',
                         routing_key='node_remove',
                         body=node_name
@@ -69,6 +61,7 @@ def keep_alive (ch, method, properties, body):
     print(f'Nó {str(body)} vivo')
     node_name = body.decode()
     node_timer[node_name] = tolerancia
+
 
 
 def new_node (ch, method, properties, body):
@@ -126,9 +119,8 @@ channel.basic_consume(
 )
 
 # Iniciando nó
-t = Thread(target=monitor)
+t = Thread(target=monitor, args=[channel])
+t.daemon = True
 t.start()
 
 channel.start_consuming()
-
-
