@@ -81,21 +81,26 @@ channel.exchange_declare(exchange="chunk_conn", exchange_type="direct")
 def search_chunk(ch, method, props, body):
     file_name, chunk, keyword = pickle.loads(body)
 
-    keyword_treated = keyword.lower()
+    keyword_bytes = keyword_treated.encode("utf-8").lower()
 
     result_list = []
+
     file_path = os.path.join(files_dir, file_name, str(chunk))
     print(f"Verificando o arquivo: {file_path}")
 
     try:
-        with open(file_path, mode="r", encoding="utf8") as f:
+        with open(file_path, mode="rb") as f:  # Modo de leitura binária
             for line in f:
                 line_lower = line.lower()
-                print(f"Verificando a linha: {line_lower.strip()}")
-                print(f"Contém a palavra-chave '{keyword_treated}': {keyword_treated in line_lower}")
-                if keyword_treated in line_lower:
+                print(f"Verificando a linha: {line_lower}")
+                print(
+                    f"Contém a palavra-chave '{keyword_bytes}': {keyword_bytes in line_lower}"
+                )
+                if keyword_bytes in line_lower:
                     print(f"Encontrado em {file_name}/{chunk}")
-                    result_list.append(line)
+                    result_list.append(
+                        line.decode("utf-8", errors="ignore")
+                    )  # Decodificar para string para armazenamento
     except FileNotFoundError:
         print(f"Arquivo {file_path} não encontrado.")
     except Exception as e:
@@ -170,9 +175,7 @@ def ping_monitor(keep_alive_interval):
         while True:
             sleep(keep_alive_interval)
             ping_channel.basic_publish(
-                exchange='monitoring',
-                routing_key='keep_alive',
-                body=node_name
+                exchange="monitoring", routing_key="keep_alive", body=node_name
             )
 
     except KeyboardInterrupt:
