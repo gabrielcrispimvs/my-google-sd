@@ -88,7 +88,7 @@ def search_chunk(ch, method, props, body):
 
     with open(join(files_dir, file_name, str(chunk)), mode="r", encoding="utf8") as f:
         for line in f:
-            print(line.lower())
+            print(keyword_treated in line.lower(), keyword_treated, line.lower())
             if keyword_treated in line.lower():
                 print(f"Encontrado em {file_name}/{chunk}")
                 result_list.append(line)
