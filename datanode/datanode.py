@@ -93,13 +93,6 @@ def search_chunk(ch, method, props, body):
         with open(file_path, mode="rb") as f:  # Modo de leitura binária
             for line in f:
                 line_lower = line.lower()
-                if keyword_bytes in line_lower:
-                    print(f"Encontrado em {file_name}/{chunk}")
-                    # append file_name, chunk, line snippet
-                    snippet = [line]
-                    result_list.append((file_name, chunk, ))
-            for line in f:
-                line_lower = line.lower()
                 pos = line_lower.find(keyword_bytes)
                 if pos != -1:
                     start = max(0, pos - snippet_length)
