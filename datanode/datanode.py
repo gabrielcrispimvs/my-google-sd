@@ -80,29 +80,17 @@ channel.exchange_declare(exchange="chunk_conn", exchange_type="direct")
 def search_chunk(ch, method, props, body):
     file_name, chunk, keyword = pickle.loads(body)
 
-    re_pattern = re.compile(r"\s" + keyword + r"\s", flags=re.IGNORECASE)
+    keyword_treated = keyword.lower()
 
     result_list = []
 
     print(f"pesquisando chunk {chunk}\n")
 
     with open(join(files_dir, file_name, str(chunk)), mode="r", encoding="utf8") as f:
-        while True:
-            line = f.readline()
-            if line == "":
-                break
-
-            try:
-                news_item = json.loads(line)
-                # print(news_item)
-
+        for line in f:
+            if keyword_treated in line.lower():
+                result_list.append(line)
                 
-                if (re_pattern.search(line)
-                ):
-                    result_list += [line]
-            except:
-                break
-
     print(result_list)
 
     channel.basic_publish(
