@@ -1,3 +1,4 @@
+from os import listdir
 import rpyc
 from rpyc.utils.registry import TCPRegistryClient
 import sys
@@ -128,20 +129,9 @@ while True:
 
             except FileNotFoundError:
                 print(f"Arquivo não encontrado.")
-
-        case "3":
-            file_path = input(f"Digite o caminho do arquivo a ser inserido.\n")
-            with open(file_path, mode="r") as f:
-                ip, port = r.discover("INSERT")[0]
-                conn = rpyc.connect(
-                    ip,
-                    port,
-                    config={"allow_public_attrs": True, "sync_request_timeout": 240},
-                )
-                m = conn.root
-                m.insert(f)
-                conn.close()
-        case "4":
+        case "ls":
+            # local list
+            print(listdir())
             pass
         case other:
             print(f"{other} não é uma opção válida.\n")
