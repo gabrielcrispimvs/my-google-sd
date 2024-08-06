@@ -84,6 +84,7 @@ def search_chunk(ch, method, props, body):
     keyword_bytes = keyword.encode("utf-8").lower()
 
     result_list = []
+    snippet_length = 30
 
     file_path = os.path.join(files_dir, file_name, str(chunk))
     print(f"Verificando o arquivo: {file_path}")
@@ -92,15 +93,21 @@ def search_chunk(ch, method, props, body):
         with open(file_path, mode="rb") as f:  # Modo de leitura binária
             for line in f:
                 line_lower = line.lower()
-                print(f"Verificando a linha: {line_lower}")
-                print(
-                    f"Contém a palavra-chave '{keyword_bytes}': {keyword_bytes in line_lower}"
-                )
                 if keyword_bytes in line_lower:
                     print(f"Encontrado em {file_name}/{chunk}")
-                    result_list.append(
-                        line.decode("utf-8", errors="ignore")
-                    )  # Decodificar para string para armazenamento
+                    # append file_name, chunk, line snippet
+                    snippet = [line]
+                    result_list.append((file_name, chunk, ))
+            for line in f:
+                line_lower = line.lower()
+                pos = line_lower.find(keyword_bytes)
+                if pos != -1:
+                    start = max(0, pos - snippet_length)
+                    end = min(len(line), pos + len(keyword_bytes) + snippet_length)
+                    snippet = line[start:end].decode('utf-8', errors='ignore')
+                    print(f"Encontrado em {file_name}/{chunk}: {snippet}")
+                    result_list.append(snippet)
+                    
     except FileNotFoundError:
         print(f"Arquivo {file_path} não encontrado.")
     except Exception as e:
