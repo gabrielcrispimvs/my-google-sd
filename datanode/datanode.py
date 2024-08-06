@@ -163,7 +163,7 @@ def connect_to_chunk(ch, method, props, body):
 
 
 def ping_monitor(keep_alive_interval):
-    ping_connection = pika.BlockingConnection(pika.ConnectionParameters("localhost"))
+    ping_connection = pika.BlockingConnection(pika.ConnectionParameters(broker_ip))
     ping_channel = ping_connection.channel()
 
     ping_channel.exchange_declare("monitoring", exchange_type="direct")
