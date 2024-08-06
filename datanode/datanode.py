@@ -1,3 +1,4 @@
+import os
 import rpyc
 from time import sleep
 from threading import Thread
@@ -83,17 +84,24 @@ def search_chunk(ch, method, props, body):
     keyword_treated = keyword.lower()
 
     result_list = []
+    file_path = os.path.join(files_dir, file_name, str(chunk))
+    print(f"Verificando o arquivo: {file_path}")
 
-    print(f"pesquisando chunk {chunk}\n")
+    try:
+        with open(file_path, mode="r", encoding="utf8") as f:
+            for line in f:
+                line_lower = line.lower()
+                print(f"Verificando a linha: {line_lower.strip()}")
+                print(f"Contém a palavra-chave '{keyword_treated}': {keyword_treated in line_lower}")
+                if keyword_treated in line_lower:
+                    print(f"Encontrado em {file_name}/{chunk}")
+                    result_list.append(line)
+    except FileNotFoundError:
+        print(f"Arquivo {file_path} não encontrado.")
+    except Exception as e:
+        print(f"Ocorreu um erro ao ler o arquivo: {e}")
 
-    with open(join(files_dir, file_name, str(chunk)), mode="r", encoding="utf8") as f:
-        for line in f:
-            print(keyword_treated in line.lower(), keyword_treated, line.lower())
-            if keyword_treated in line.lower():
-                print(f"Encontrado em {file_name}/{chunk}")
-                result_list.append(line)
-                
-    print(result_list)
+    print(f"Resultados encontrados: {result_list}")
 
     channel.basic_publish(
         exchange="",
