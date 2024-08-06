@@ -84,7 +84,9 @@ def get_files():
 
 
 def search_keyword(ch, method, props, body):
+    start = perf_counter()
     keyword = body.decode()
+    client_props = props
 
     print(f"Buscando {keyword}\n")
 
@@ -130,13 +132,19 @@ def search_keyword(ch, method, props, body):
     print(f"Busca finalizada")
     answer.sort(key=lambda x: x[1])
 
+    print(client_props.correlation_id, client_props.reply_to)
     channel.basic_publish(
         exchange="",
-        routing_key=props.reply_to,
+        routing_key=client_props.reply_to,
         body=pickle.dumps(answer),
-        properties=pika.BasicProperties(correlation_id=props.correlation_id),
+        properties=pika.BasicProperties(correlation_id=client_props.correlation_id),
     )
 
+    finish = perf_counter()
+    # salvar benchmark no arquivo bench.txt
+    with open(mode="a") as f:
+        f.write(str(finish - start))
+        
     ch.basic_ack(method.delivery_tag)
 
 

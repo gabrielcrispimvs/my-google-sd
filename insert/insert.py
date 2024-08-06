@@ -82,6 +82,7 @@ def request_nodes (file_name, chunk_num, qnt):
             on_response(channel, method, props, body)
 
 def insert_file (ch, method, props, body):
+    start = perf_counter()
     file_name, chunk_num, buffer = pickle.loads(body)
 
     if buffer == '':
@@ -104,7 +105,11 @@ def insert_file (ch, method, props, body):
         routing_key=file_name_topic+'.'+str(chunk_num),
         body=body
     )
-
+    
+    finish = perf_counter()
+    # salvar benchmark no arquivo bench.txt
+    with open(mode="a") as f:
+        f.write(str(finish - start))
     ch.basic_ack(method.delivery_tag)
 
 

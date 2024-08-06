@@ -48,7 +48,6 @@ callback_queue = result.method.queue
 while True:
 
     cmd = input(f"Selecione uma opção:\n" f"1. Pesquisar\n" f"2. Inserir arquivo\n")
-
     match cmd:
         case '1': # Pesquisa
             keyword = input(f'Entre com o termo a ser buscado:\n')
@@ -57,13 +56,13 @@ while True:
             corr_id = generate_corr_id()
 
             def on_response (ch, method, props, body):
-                # nonlocal response
+                global response
                 if props.correlation_id == corr_id:
                     response = pickle.loads(body)
                     ch.basic_ack(method.delivery_tag)
 
-            print(callback_queue)
                         
+            print(corr_id, callback_queue)
             channel.basic_publish(
                 exchange='client_cmd',
                 routing_key='search',
@@ -81,12 +80,10 @@ while True:
                 print('Nenhuma notícia encontrada.')
 
             else:
-                for file_name, news_item in response:
+                for file_name, chunk, news in response:
                     print(
                         f"Notícia encontrada no arquivo {file_name}:\n"
-                        f"{news_item['title']}\n"
-                        f"{news_item['maintext']}\n"
-                        f"Link: {news_item['url']}\n"
+                        f"{news}\n"
                     )
 
         case "2":
