@@ -108,7 +108,7 @@ def insert_file (ch, method, props, body):
     
     finish = perf_counter()
     # salvar benchmark no arquivo bench.txt
-    with open(mode="a") as f:
+    with open("bench.txt", mode="a") as f:
         f.write(str(finish - start))
     ch.basic_ack(method.delivery_tag)
 
