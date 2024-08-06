@@ -81,7 +81,7 @@ channel.exchange_declare(exchange="chunk_conn", exchange_type="direct")
 def search_chunk(ch, method, props, body):
     file_name, chunk, keyword = pickle.loads(body)
 
-    keyword_bytes = keyword_treated.encode("utf-8").lower()
+    keyword_bytes = keyword.encode("utf-8").lower()
 
     result_list = []
 
