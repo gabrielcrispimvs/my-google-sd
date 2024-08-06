@@ -4,6 +4,12 @@ from threading import Thread
 from time import sleep
 import sys
 
+from string import ascii_lowercase
+from string import digits
+from random import choices
+
+def generate_corr_id (qnt=12):
+    return ''.join(choices(ascii_lowercase + digits, k=qnt))
 
 try:
     broker_ip = sys.argv[1]

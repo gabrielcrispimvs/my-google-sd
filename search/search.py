@@ -1,64 +1,148 @@
-import rpyc
-from rpyc.utils.server import ThreadedServer
-from threading import Thread
+import pika
+import pickle
+from re import sub
 import sys
 
+from time import perf_counter
+
+from string import ascii_lowercase
+from string import digits
+from random import choices
+
+def generate_corr_id (qnt=12):
+    return ''.join(choices(ascii_lowercase + digits, k=qnt))
+
 try:
-    registry_ip = sys.argv[1]
-    registry_port = int(sys.argv[2])
+    broker_ip = sys.argv[1]
 except:
-    print('Passe IP e porta do registry como argumentos.')
-    exit()
+    broker_ip = 'localhost'
+    print(f'Usando endereço padrão: {broker_ip}')
 
-# registry_ip = '192.168.40.240'
-# registry_port = 18811
-
-r = rpyc.utils.registry.TCPRegistryClient(registry_ip, registry_port)
-
-
-class SearchService(rpyc.Service):
-
-    def exposed_search(self, keyword):
-        search_dict = self.request_nodes()
-        print('OK')
-        print(f'dict: {search_dict}')
-        results = self.request_search(keyword, search_dict)
-        print('Busca finalizada.')
-        return results
+try:
+    broker_port = int(sys.argv[2])
+except:
+    broker_port = 5672
+    print(f'Usando porta padrão: {broker_port}')
 
 
-    def request_nodes(self):
-        print('Solicitando nós ao load balancer...')
-        ip, port = r.discover('LOADBALANCER')[0]
-        conn = rpyc.connect(ip, port)
-        lb = conn.root
-        search_dict = lb.get_nodes_search()
-        return search_dict
+
+conn = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+channel = conn.channel()
 
 
-    def request_search(self, keyword, search_dict):
-        thread_list = []
-        results = []
-        for node in search_dict:
-            ip, port = r.discover('DATANODE_' + node)[0]
-            
-            print(f'conectando com nó {node}')
-            conn = rpyc.connect(ip, port, config={'allow_public_attrs': True, 'sync_request_timeout': 240})
-            datanode = conn.root
-            for file_name in search_dict[node]:
-                f, part, qnt_parts = file_name
-                t = Thread(target=datanode.search, args=[keyword, f, part, qnt_parts, results])
-                t.start()
-                thread_list += [t]
-                # results += t.join()
-            
-            # results += datanode.search(f, part, qnt_parts)
-        
-        for t in thread_list:
-            t.join()
-        # print(results)
-        return results
+channel.exchange_declare('lb_request', exchange_type='direct')
+channel.exchange_declare('send_chunk', exchange_type='topic')
+
+####################################
+
+channel.exchange_declare('client_cmd', exchange_type='direct')
+
+channel.queue_declare('search')
+channel.queue_bind(
+    queue='search',
+    exchange='client_cmd',
+    routing_key='search'
+)
+
+# Funções
 
 
-s = ThreadedServer(SearchService, registrar=r, auto_register=True)
-s.start()
+def get_files ():
+    print(f'Adquirindo lista de arquivos.')
+
+    result = channel.queue_declare('', exclusive=True)
+    callback_queue = result.method.queue
+    print(f'get_files callback: {callback_queue}')
+
+    response = None
+    corr_id = generate_corr_id()
+
+    def on_response (ch, method, props, body):
+        nonlocal response
+        print(corr_id, props.correlation_id)
+        if props.correlation_id == corr_id:
+            response = pickle.loads(body)
+            ch.basic_ack(method.delivery_tag)
+
+    channel.basic_publish(
+        exchange='lb_request',
+        routing_key='search',
+        body='',
+        properties=pika.BasicProperties(reply_to=callback_queue, correlation_id=corr_id)
+    )
+    print(f'mensagem enviada.')
+
+    while response == None:
+        queue_state = channel.queue_declare(callback_queue, passive=True)
+        if queue_state.method.message_count != 0:
+            method, props, body = channel.basic_get(callback_queue)
+            on_response(channel, method, props, body)
+
+    print('sucesso')
+
+    return response
+
+def search_keyword (ch, method, props, body):
+    keyword = str(body)
+
+    print(f'Buscando {keyword}\n')
+
+    result = channel.queue_declare('', exclusive=True)
+    callback_queue = result.method.queue
+
+    files = get_files()
+
+    # print(f'Lista de arquivos adquirida')
+
+    response = {}
+    answer = []
+
+    def on_response (ch, method, props, body):
+        nonlocal response
+        nonlocal answer
+        file_name, chunk, news = pickle.loads(body)
+        print(news)
+        answer += news
+        response[ (file_name, chunk) ] = True
+        ch.basic_ack(method.delivery_tag)
+
+    print(files)
+
+    for file_name in files:
+        qnt_chunk = files[file_name]
+        for chunk in range(1, qnt_chunk+1):
+            response[ (file_name, chunk) ] = False
+            print(f'Enviando busca do chunk {chunk} do arquivo {file_name}')
+            channel.basic_publish(
+                exchange='',
+                routing_key=file_name+'/'+str(chunk),
+                body=pickle.dumps((file_name, chunk, keyword)),
+                properties=pika.BasicProperties(reply_to=callback_queue)
+            )
+
+    while False in response.values():
+        queue_state = channel.queue_declare(callback_queue, passive=True)
+        if queue_state.method.message_count != 0:
+            new_method, new_props, new_body = channel.basic_get(callback_queue)
+            on_response(channel, new_method, new_props, new_body)
+
+    print('Busca finalizada.')
+    print(answer)
+
+    channel.basic_publish(
+        exchange='',
+        routing_key=props.reply_to,
+        body=pickle.dumps(answer),
+        properties=pika.BasicProperties(correlation_id=props.correlation_id)
+    )
+
+    ch.basic_ack(method.delivery_tag)
+
+########################
+
+channel.basic_consume(
+    queue='search',
+    on_message_callback=search_keyword
+)
+
+channel.start_consuming()

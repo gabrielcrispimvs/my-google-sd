@@ -3,10 +3,6 @@ from time import sleep
 from threading import Thread
 from rpyc.utils.server import ThreadedServer
 
-from string import ascii_lowercase
-from string import digits
-from random import choices
-
 import json
 import re
 from os import listdir
@@ -14,6 +10,13 @@ from os import mkdir
 from os.path import join
 import sys
 # from tqdm import tqdm
+
+from string import ascii_lowercase
+from string import digits
+from random import choices
+
+def generate_corr_id (qnt=12):
+    return ''.join(choices(ascii_lowercase + digits, k=qnt))
 
 try:
     registry_ip = sys.argv[1]
@@ -143,14 +146,56 @@ import pika
 import pickle
 from re import sub
 
-conn = pika.BlockingConnection(pika.ConnectionParameters('192.168.40.141'))
+conn = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
 channel = conn.channel()
 
 channel.exchange_declare(exchange='monitoring', exchange_type='direct')
 
 channel.exchange_declare(exchange='send_chunk', exchange_type='topic')
+# channel.exchange_declare(exchange='search_task', exchange_type='fanout')
 channel.exchange_declare(exchange='chunk_conn', exchange_type='direct')
 
+
+def search_chunk (ch, method, props, body):
+    file_name, chunk, keyword = pickle.loads(body)
+
+    re_pattern = re.compile(r'\s' + keyword + r'\s', flags=re.IGNORECASE)
+
+    result_list = []
+
+    print(f'pesquisando chunk {chunk}\n')
+
+    with open(join(files_dir, file_name, str(chunk)), mode='r', encoding='utf8') as f:
+        while True:
+            line = f.readline()
+            # print(line)
+            if line == '':
+                break
+
+            try:
+                news_item = json.loads(line)
+                # print(news_item)
+
+                if news_item['title'] == None:
+                    news_item['title'] = ''
+                if news_item['maintext'] == None:
+                    news_item['maintext'] = ''
+
+                if (re_pattern.search(news_item['title'])) or (re_pattern.search(news_item['maintext'])):
+                    print(news_item)
+                    result_list += [news_item]
+            except:
+                # print('break')
+                ### Tentando ler arquivo que não é de notícias (como o arquivo teste.txt)
+                break
+
+    print(result_list)
+
+    channel.basic_publish(
+        exchange='',
+        routing_key=props.reply_to,
+        body=pickle.dumps((file_name, chunk, result_list)),
+    )
 
 def save_chunk (ch, method, props, body):
     file_name, chunk_num, buffer = pickle.loads(body)
@@ -167,6 +212,13 @@ def save_chunk (ch, method, props, body):
     with open(join(chunks_dir, str(chunk_num)), mode='w') as chunk:
         chunk.write(buffer)
 
+
+    channel.queue_declare(file_name+'/'+str(chunk_num))
+    channel.basic_consume(
+        queue=file_name+'/'+str(chunk_num),
+        on_message_callback=search_chunk
+    )
+
     ch.basic_ack(method.delivery_tag)
 
 
@@ -179,6 +231,14 @@ def connect_to_chunk (ch, method, props, body):
 
     result = channel.queue_declare('', exclusive=True)
     chunk_queue = result.method.queue
+
+    
+
+
+    channel.basic_consume(
+        queue=chunk_queue,
+        on_message_callback=save_chunk
+    )
 
     channel.queue_bind(
         queue=chunk_queue,
@@ -200,7 +260,7 @@ def connect_to_chunk (ch, method, props, body):
 
 
 def ping_monitor(keep_alive_interval):
-    ping_connection = pika.BlockingConnection(pika.ConnectionParameters('192.168.40.141'))
+    ping_connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
     ping_channel = ping_connection.channel()
 
     ping_channel.exchange_declare('monitoring', exchange_type='direct')
@@ -257,4 +317,4 @@ t1.start()
 
 
 s = ThreadedServer(DataNodeService, registrar=r, auto_register=True, protocol_config={'allow_public_attrs': True})
-s.start()
+# s.start()

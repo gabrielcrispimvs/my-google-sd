@@ -2,6 +2,13 @@ import rpyc
 from rpyc.utils.registry import TCPRegistryClient
 import sys
 
+from string import ascii_lowercase
+from string import digits
+from random import choices
+
+def generate_corr_id (qnt=12):
+    return ''.join(choices(ascii_lowercase + digits, k=qnt))
+
 try:
     registry_ip = sys.argv[1]
     registry_port = int(sys.argv[2])
@@ -25,6 +32,10 @@ channel = conn.channel()
 
 channel.exchange_declare('client_cmd', exchange_type='direct')
 
+result = channel.queue_declare('', exclusive=True)
+callback_queue = result.method.queue
+print(callback_queue)
+
 while True:
 
     cmd = input(
@@ -37,18 +48,41 @@ while True:
         case '1': # Pesquisa
             keyword = input(f'Entre com o termo a ser buscado:\n')
             
-            ip, port = r.discover('SEARCH')[0]
-            conn = rpyc.connect(ip, port, config={'sync_request_timeout': 240})
-            srch = conn.root
-            results = srch.search(keyword)
+            response = None
+            corr_id = generate_corr_id()
 
-            for file_name, news_item in results:
-                print(
-                    f"Notícia encontrada no arquivo {file_name}:\n"
-                    f"{news_item['title']}\n"
-                    f"{news_item['maintext']}\n"
-                    f"Link: {news_item['url']}\n"
-                )
+            def on_response (ch, method, props, body):
+                # nonlocal response
+                if props.correlation_id == corr_id:
+                    response = pickle.loads(body)
+                    ch.basic_ack(method.delivery_tag)
+
+            print(callback_queue)
+                        
+            channel.basic_publish(
+                exchange='client_cmd',
+                routing_key='search',
+                body=keyword,
+                properties=pika.BasicProperties(reply_to=callback_queue, correlation_id=corr_id)
+            )
+
+            while response == None:
+                queue_state = channel.queue_declare(callback_queue, passive=True)
+                if queue_state.method.message_count != 0:
+                    method, props, body = channel.basic_get(callback_queue)
+                    on_response(channel, method, props, body)
+
+            if response == []:
+                print('Nenhuma notícia encontrada.')
+
+            else:
+                for file_name, news_item in response:
+                    print(
+                        f"Notícia encontrada no arquivo {file_name}:\n"
+                        f"{news_item['title']}\n"
+                        f"{news_item['maintext']}\n"
+                        f"Link: {news_item['url']}\n"
+                    )
 
         case '2':
             try:
@@ -61,9 +95,15 @@ while True:
                     buffer = ''
                     chunk_num = 0
                     while True:
-                        buffer += f.read(500000)
+                        buffer += f.read(5000000)
 
                         if buffer == '':
+                            channel.basic_publish(
+                                exchange='client_cmd',
+                                routing_key='insert',
+                                body=pickle.dumps((file_name,chunk_num,''))
+                            )
+
                             break;
 
                         news_sep_idx = len(buffer)

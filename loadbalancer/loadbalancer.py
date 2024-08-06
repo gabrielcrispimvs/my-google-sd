@@ -3,6 +3,13 @@ from threading import Thread
 from rpyc.utils.server import ThreadedServer
 import sys
 
+from string import ascii_lowercase
+from string import digits
+from random import choices
+
+def generate_corr_id (qnt=12):
+    return ''.join(choices(ascii_lowercase + digits, k=qnt))
+
 try:
     registry_ip = sys.argv[1]
     registry_port = int(sys.argv[2])
@@ -64,7 +71,7 @@ lb = LoadBalancerService()
 import pika
 import pickle
 
-
+file_dict = {}
 
 def remove_node (ch, method, props, body):
     node_name = body.decode()
@@ -96,35 +103,45 @@ channel.exchange_declare(exchange='lb_update', exchange_type='direct')
 channel.exchange_declare(exchange='lb_request', exchange_type='direct')
 
 
-result = channel.queue_declare('', exclusive=True)
-insert_req_queue = result.method.queue
+channel.queue_declare('search_req', exclusive=True)
+channel.queue_bind(
+    queue='search_req',
+    exchange='lb_request',
+    routing_key='search'
+)
+
+channel.queue_declare('update_file', exclusive=True)
+channel.queue_bind(
+    queue='update_file',
+    exchange='lb_request',
+    routing_key='update'
+)
+
+channel.queue_declare('insert_req', exclusive=True)
 # print(insert_req_queue)
 channel.queue_bind(
-    queue=insert_req_queue,
+    queue='insert_req',
     exchange='lb_request',
     routing_key='insert'
 )
 
-result = channel.queue_declare('', exclusive=True)
-node_remove_queue = result.method.queue
+channel.queue_declare('node_remove', exclusive=True)
 channel.queue_bind(
-    queue=node_remove_queue,
+    queue='node_remove',
     exchange='lb_update',
     routing_key='node_remove'
 )
 
-result = channel.queue_declare('', exclusive=True)
-file_remove_queue = result.method.queue
+channel.queue_declare('file_remove', exclusive=True)
 channel.queue_bind(
-    queue=file_remove_queue,
+    queue='file_remove',
     exchange='lb_update',
     routing_key='file_remove'
 )
 
-result = channel.queue_declare('', exclusive=True)
-add_queue = result.method.queue
+channel.queue_declare('add', exclusive=True)
 channel.queue_bind(
-    queue=add_queue,
+    queue='add',
     exchange='lb_update',
     routing_key='add'
 )
@@ -164,10 +181,9 @@ def connect_datanodes_to_chunk (chosen_nodes, file_name, chunk_num):
         nonlocal response
         if props.correlation_id in chosen_nodes:
             response[props.correlation_id] = True
+            ch.basic_ack(method.delivery_tag)
 
-        ch.basic_ack(method.delivery_tag)
-
-
+        
     for node_name in chosen_nodes:
         channel.basic_publish(
             exchange='chunk_conn',
@@ -183,6 +199,7 @@ def connect_datanodes_to_chunk (chosen_nodes, file_name, chunk_num):
         if queue_state.method.message_count != 0:
             method, props, body = channel.basic_get(callback_queue)
             on_response(channel, method, props, body)
+
 
     # print('ok')
 
@@ -221,24 +238,53 @@ def choose_nodes (ch, method, props, body):
         body=''
     )
 
+def update_files (ch, method, props, body):
+    global file_dict
+    file_name, qnt_chunk = pickle.loads(body)
+    file_dict[file_name] = qnt_chunk
 
+    ch.basic_ack(method.delivery_tag)
+
+
+def get_files (ch, method, props, body):
+    
+    response = file_dict
+
+
+    channel.basic_publish(
+        exchange='',
+        routing_key=props.reply_to,
+        body=pickle.dumps(response),
+        properties=pika.BasicProperties(correlation_id=props.correlation_id)
+    )
+
+    ch.basic_ack(method.delivery_tag)
 
 ###########
 
+channel.basic_consume(
+    queue='update_file',
+    on_message_callback=update_files
+)
 
 channel.basic_consume(
-    queue=node_remove_queue,
+    queue='search_req',
+    on_message_callback=get_files
+)
+
+channel.basic_consume(
+    queue='node_remove',
     on_message_callback=remove_node
 )
 
 channel.basic_consume(
-    queue=insert_req_queue,
+    queue='insert_req',
     on_message_callback=choose_nodes,
     auto_ack=True
 )
 
 channel.basic_consume(
-    queue=add_queue,
+    queue='add',
     on_message_callback=add_file
 )
 
@@ -248,7 +294,7 @@ t = Thread(target=channel.start_consuming)
 t.start()
 # Levantando Load Balancer
 s = ThreadedServer(lb, registrar=r, auto_register=True)
-s.start()
+# s.start()
 
 
 # t = Thread(target=s.start)
