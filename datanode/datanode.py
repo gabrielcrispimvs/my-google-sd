@@ -58,7 +58,7 @@ from re import sub
 try:
     broker_ip = sys.argv[1]
 except:
-    broker_ip = "192.168.40.141"
+    broker_ip = "192.168.40.39"
     print(f"Usando endereço padrão: {broker_ip}")
 
 try:
