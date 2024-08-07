@@ -25,8 +25,24 @@ pkill -SIGINT -f datanode.py
 pkill -SIGINT -f datanode.py
 
 echo Starting datanode.py
-### ALTERAR 192.168.40.39 para o ip da máquina que está rodando o registry
+### ALTERAR 192.168.40.63 para o ip da máquina que está rodando o registry
 cd datanode
-python3 datanode.py 192.168.40.39 5672 > log.txt &
+python3 datanode.py 192.168.40.63 5672 > log.txt &
 
 disown
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

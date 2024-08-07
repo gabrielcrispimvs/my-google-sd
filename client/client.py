@@ -25,7 +25,7 @@ def generate_corr_id(qnt=12):
 try:
     broker_ip = sys.argv[1]
 except:
-    broker_ip = "192.168.40.39"
+    broker_ip = "192.168.40.63"
     print(f"Usando endereço padrão: {broker_ip}")
 
 try:
