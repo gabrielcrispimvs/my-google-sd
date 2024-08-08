@@ -33,6 +33,7 @@ channel = conn.channel()
 
 channel.exchange_declare("lb_request", exchange_type="direct")
 channel.exchange_declare("send_chunk", exchange_type="topic")
+channel.exchange_declare("search_chunk", exchange_type="fanout")
 
 ####################################
 
@@ -93,8 +94,6 @@ def search_keyword(ch, method, props, body):
     result = channel.queue_declare("", exclusive=True)
     callback_queue = result.method.queue
 
-    files = get_files()
-
     # print(f'Lista de arquivos adquirida')
 
     response = {}
@@ -103,25 +102,24 @@ def search_keyword(ch, method, props, body):
     def on_response(ch, method, props, body):
         nonlocal response
         nonlocal answer
-        file_name, chunk, news = pickle.loads(body)
+        queue_name, news = pickle.loads(body)
         print(news)
-        answer += [(file_name, chunk, news)]
-        response[(file_name, chunk)] = True
+        answer += [(queue_name, news)]
+        response[(queue_name)] = True
         ch.basic_ack(method.delivery_tag)
-
-    print(files)
-
+    
+    files = get_files()
     for file_name in files:
         qnt_chunk = files[file_name]
         for chunk in range(1, qnt_chunk + 1):
-            response[(file_name, chunk)] = False
-            print(f"Enviando busca do chunk {chunk} do arquivo {file_name}")
-            channel.basic_publish(
-                exchange="",
-                routing_key=file_name + "/" + str(chunk),
-                body=pickle.dumps((file_name, chunk, keyword)),
-                properties=pika.BasicProperties(reply_to=callback_queue),
-            )
+            response[(file_name + "/" + str(chunk))] = False
+            
+    channel.basic_publish(
+        exchange="search_chunk",
+        routing_key="",
+        body=keyword,
+        properties=pika.BasicProperties(reply_to=callback_queue),
+    )
 
     while False in response.values():
         queue_state = channel.queue_declare(callback_queue, passive=True)
@@ -130,7 +128,7 @@ def search_keyword(ch, method, props, body):
             on_response(channel, new_method, new_props, new_body)
 
     print(f"Busca finalizada")
-    answer.sort(key=lambda x: x[1])
+    answer.sort(key=lambda x: x[0])
 
     print(client_props.correlation_id, client_props.reply_to)
     channel.basic_publish(
@@ -144,7 +142,7 @@ def search_keyword(ch, method, props, body):
     # salvar benchmark no arquivo bench.txt
     with open("bench.txt", mode="a") as f:
         f.write(str(finish - start))
-        
+
     ch.basic_ack(method.delivery_tag)
 
 

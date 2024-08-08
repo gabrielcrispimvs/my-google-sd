@@ -76,43 +76,46 @@ channel = conn.channel()
 channel.exchange_declare(exchange="monitoring", exchange_type="direct")
 channel.exchange_declare(exchange="send_chunk", exchange_type="topic")
 channel.exchange_declare(exchange="chunk_conn", exchange_type="direct")
+channel.exchange_declare(exchange="search_chunk", exchange_type="fanout")
 
+def gen_search_chunk(queue_name):
+    def search_chunk(ch, method, props, body):
+        keyword = body.decode()
 
-def search_chunk(ch, method, props, body):
-    file_name, chunk, keyword = pickle.loads(body)
+        keyword_bytes = keyword.encode("utf-8").lower()
 
-    keyword_bytes = keyword.encode("utf-8").lower()
+        result_list = []
+        snippet_length = 30
 
-    result_list = []
-    snippet_length = 30
+        file_path = os.path.join(files_dir, queue_name)
+        print(f"Verificando o arquivo: {file_path}")
 
-    file_path = os.path.join(files_dir, file_name, str(chunk))
-    print(f"Verificando o arquivo: {file_path}")
+        try:
+            with open(file_path, mode="rb") as f:  # Modo de leitura binária
+                for line in f:
+                    line_lower = line.lower()
+                    pos = line_lower.find(keyword_bytes)
+                    if pos != -1:
+                        start = max(0, pos - snippet_length)
+                        end = min(len(line), pos + len(keyword_bytes) + snippet_length)
+                        snippet = line[start:end].decode("utf-8", errors="ignore")
+                        print(f"Encontrado em {queue_name}: {snippet}")
+                        result_list.append(snippet)
 
-    try:
-        with open(file_path, mode="rb") as f:  # Modo de leitura binária
-            for line in f:
-                line_lower = line.lower()
-                pos = line_lower.find(keyword_bytes)
-                if pos != -1:
-                    start = max(0, pos - snippet_length)
-                    end = min(len(line), pos + len(keyword_bytes) + snippet_length)
-                    snippet = line[start:end].decode('utf-8', errors='ignore')
-                    print(f"Encontrado em {file_name}/{chunk}: {snippet}")
-                    result_list.append(snippet)
-                    
-    except FileNotFoundError:
-        print(f"Arquivo {file_path} não encontrado.")
-    except Exception as e:
-        print(f"Ocorreu um erro ao ler o arquivo: {e}")
+        except FileNotFoundError:
+            print(f"Arquivo {file_path} não encontrado.")
+        except Exception as e:
+            print(f"Ocorreu um erro ao ler o arquivo: {e}")
 
-    print(f"Resultados encontrados: {result_list}")
+        print(f"Resultados encontrados: {result_list}")
 
-    channel.basic_publish(
-        exchange="",
-        routing_key=props.reply_to,
-        body=pickle.dumps((file_name, chunk, result_list)),
-    )
+        print(props.reply_to)
+        channel.basic_publish(
+            exchange="",
+            routing_key=props.reply_to,
+            body=pickle.dumps((queue_name, result_list)),
+        )
+    return search_chunk 
 
 
 def save_chunk(ch, method, props, body):
@@ -131,8 +134,13 @@ def save_chunk(ch, method, props, body):
         chunk.write(buffer)
 
     channel.queue_declare(file_name + "/" + str(chunk_num))
+    channel.queue_bind(
+        file_name + "/" + str(chunk_num),
+        "search_chunk",
+        file_name + "/" + str(chunk_num),
+    )
     channel.basic_consume(
-        queue=file_name + "/" + str(chunk_num), on_message_callback=search_chunk
+        queue=file_name + "/" + str(chunk_num), on_message_callback=gen_search_chunk(file_name + "/" + str(chunk_num))
     )
 
     ch.basic_ack(method.delivery_tag)
@@ -201,6 +209,17 @@ channel.basic_publish(
 
 for file in file_list:
     # chunk_num = lista arquivos, pega o int(nome) max
+    for chunk in listdir(join(files_dir, file)):
+        channel.queue_declare(file + "/" + str(chunk))
+        channel.queue_bind(
+            file + "/" + str(chunk),
+            "search_chunk",
+            file + "/" + str(chunk),
+        )
+        channel.queue_purge(file + "/" + str(chunk))
+        channel.basic_consume(
+            queue=file + "/" + str(chunk), on_message_callback=gen_search_chunk(file + "/" + str(chunk))
+        )
     chunk_num = max(
         [
             int(sub(r"\D", "", f))

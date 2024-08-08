@@ -80,9 +80,9 @@ while True:
                 print('Nenhuma notícia encontrada.')
 
             else:
-                for file_name, chunk, news in response:
+                for file_name_chunk, news in response:
                     print(
-                        f"Notícia encontrada no arquivo {file_name}:\n"
+                        f"Notícia encontrada no arquivo {file_name_chunk}:\n"
                         f"{news}\n"
                     )
 
